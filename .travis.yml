@@ -1,0 +1,49 @@
+language: objective-c
+osx_image: xcode11.3
+
+#Enable caching for pods
+cache: cocoapods
+
+#Set global env variables
+env:
+  global:
+    - APP_NAME="$APP_NAME"
+    - PROFILE_NAME="$PROFILE_NAME"
+    - CERT_NAME="$CERT_NAME"
+
+#Install pods
+podfile: Covid19_Internal/Podfile
+
+#Decrypt original iOS certificates
+before_install:
+- openssl aes-256-cbc -K $encrypted_2fd36ec9d2e8_key -iv $encrypted_2fd36ec9d2e8_iv -in $PROFILE_NAME.mobileprovision.enc -out $PROFILE_NAME.mobileprovision -d
+- openssl aes-256-cbc -K $encrypted_b9eebe1f21ab_key -iv $encrypted_b9eebe1f21ab_iv -in $CERT_NAME.p12.enc -out $CERT_NAME.p12 -d
+
+#Create custom keychain and add certs to it
+before_script:
+- chmod +x ./add-key.sh
+- ./add-key.sh
+
+#Execute xcode build
+script: 
+- chmod +x ./build-iphone.sh
+- ./build-iphone.sh
+
+#Deploy apk to GitHub Releases
+before_deploy:
+  # Set up git user name and tag this commit
+  - git config --local user.name "$GITHUB_USER"
+  - git config --local user.email "$GITHUB_EMAIL"
+  - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)}
+  - git tag -f $TRAVIS_TAG
+
+deploy:
+  provider: releases
+  api_key: $GITHUB_TOKEN
+  file: "./$APP_NAME.ipa"
+  name: ios-build-$TRAVIS_TAG
+  body: Automatic build of $TRAVIS_BRANCH ($TRAVIS_COMMIT) built by Travis CI on $(date +'%F %T %Z').
+  skip_cleanup: true
+  overwrite: true
+  on:
+    all_branches: true
